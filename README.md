@@ -1,9 +1,9 @@
 <div align="center">
- <h1>GrimEnterprise</h1>
+ <h1>GrimAC</h1>
 
  <div>
-  <a href="https://github.com/Deluxeg4/GrimEnterprise/actions/workflows/gradle-publish.yml">
-   <img alt="Workflow" src="https://img.shields.io/github/actions/workflow/status/Deluxeg4/GrimEnterprise/gradle-publish.yml?style=flat&logo=github"/>
+  <a href="https://github.com/GrimAnticheat/Grim/actions/workflows/gradle-publish.yml">
+   <img alt="Workflow" src="https://img.shields.io/github/actions/workflow/status/GrimAnticheat/Grim/gradle-publish.yml?style=flat&logo=github"/>
   </a>&nbsp;&nbsp;
   <a href="https://modrinth.com/plugin/grimac">
    <img alt="Modrinth" src="https://img.shields.io/modrinth/v/LJNGWSvH?style=flat&label=version&logo=modrinth">
@@ -18,14 +18,17 @@
  <br>
 </div>
 
-GrimEnterprise is an open source Minecraft anticheat maintained by zeb.deluxeg4 and polarac.java, designed to support the latest versions of Minecraft.
+GrimAC is an open source Minecraft anticheat designed to support the latest versions of Minecraft.
 It currently supports Minecraft versions 1.8–26.2. Geyser players are fully exempt from the anticheat to prevent false positives.
-The current project version is V3. Development builds are labeled `GrimEnterprise V3 (devbuild-N)`.
+This project is considered feature-complete for the 2.0 (open-source) branch. If you would like a bug fix or enhancement and cannot sponsor the work, pull requests are welcome.
+A premium version is planned, which will offer additional subscription-based paid checks, such as heuristics.
 
 ## Downloads
 
-- [GitHub Releases](https://github.com/Deluxeg4/GrimEnterprise/releases) *(official releases)*
-- [Development builds](https://github.com/Deluxeg4/GrimEnterprise/actions) *(bleeding edge)*
+- Latest updates:
+  - **[Modrinth](https://modrinth.com/plugin/grimac)** *(recommended)*
+  - GitHub
+  artifacts: [Bukkit](https://nightly.link/GrimAnticheat/Grim/workflows/gradle-publish/2.0/grimac-bukkit.zip), [Fabric](https://nightly.link/GrimAnticheat/Grim/workflows/gradle-publish/2.0/grimac-fabric.zip) *(bleeding edge)*
 - Major releases only:
   - ~~[Hangar](https://hangar.papermc.io/GrimAnticheat/GrimAnticheat)~~
   - ~~[SpigotMC](https://www.spigotmc.org/resources/grim-anticheat.99923/)~~
@@ -59,8 +62,8 @@ information.
 
 ## Compiling From Source
 
-1. `git clone https://github.com/Deluxeg4/GrimEnterprise.git`
-2. `cd GrimEnterprise`
+1. `git clone https://github.com/GrimAnticheat/Grim.git`
+2. `cd Grim`
 3. `./gradlew build`
 4. The final jars will compile into the `<platform>/build/libs` folders
 

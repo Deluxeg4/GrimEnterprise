@@ -154,7 +154,7 @@ public class MessageUtil {
     }
 
     public @NotNull Component miniMessage(@NotNull String string, TagResolver... resolvers) {
-        string = string.replace("%prefix%", GrimAPI.INSTANCE.getConfigManager().getConfig().getStringElse("prefix", "&bGrim &c&o[Enterprise] &8Â»"));
+        string = string.replace("%prefix%", GrimAPI.INSTANCE.getConfigManager().getConfig().getStringElse("prefix", "&bGroundedGrim &8»"));
 
         // hex codes
         Matcher matcher = HEX_PATTERN.matcher(string);

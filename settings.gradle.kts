@@ -72,7 +72,7 @@ if (gradle.startParameter.isBuildScan) {
     }
 }
 
-rootProject.name = "GrimEnterprise"
+rootProject.name = "grimac"
 include("common")
 include("bukkit")
 include("fabric")

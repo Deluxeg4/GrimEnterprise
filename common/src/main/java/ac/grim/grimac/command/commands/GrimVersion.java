@@ -39,7 +39,7 @@ public class GrimVersion implements BuildableCommand {
     public static void checkForUpdatesAsync(Sender sender) {
         String current = GrimAPI.INSTANCE.getExternalAPI().getGrimVersion();
         sender.sendMessage(Component.text()
-                .append(Component.text("GrimEnterprise Version: ").color(NamedTextColor.GRAY))
+                .append(Component.text("Grim Version: ").color(NamedTextColor.GRAY))
                 .append(Component.text(current).color(NamedTextColor.AQUA))
                 .build());
         // use cached message if last check was less than 1 minute ago
@@ -59,7 +59,7 @@ public class GrimVersion implements BuildableCommand {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(CommonGrimArguments.RELEASES_URL.value()))
                     .GET()
-                    .header("User-Agent", "GrimEnterprise/" + GrimAPI.INSTANCE.getExternalAPI().getGrimVersion())
+                    .header("User-Agent", "GroundedGrim/" + GrimAPI.INSTANCE.getExternalAPI().getGrimVersion())
                     .header("Accept", "application/vnd.github+json")
                     .timeout(Duration.of(CommonGrimArguments.URL_TIMEOUT.value(), ChronoUnit.MILLIS))
                     .build();
@@ -70,7 +70,7 @@ public class GrimVersion implements BuildableCommand {
                 Component msg = updateMessage.get();
                 sender.sendMessage(Objects.requireNonNullElseGet(msg, () -> Component.text()
                         .append(MessageUtil.miniMessage("%prefix%"))
-                        .append(Component.text(" Failed to check latest GrimEnterprise version. Update server responded with status code: ")
+                        .append(Component.text(" Failed to check latest GroundedGrim version. Update server responded with status code: ")
                                 .color(NamedTextColor.YELLOW))
                         .append(Component.text(statusCode)
                                 .color(getColorForStatusCode(statusCode))
@@ -80,26 +80,28 @@ public class GrimVersion implements BuildableCommand {
             }
             // Using old JsonParser method, as old versions of Gson don't include the static one
             JsonObject object = new JsonParser().parse(response.body()).getAsJsonObject();
-            String downloadPage = getJsonString(object, "html_url", "https://github.com/Deluxeg4/GrimEnterprise/releases/tag");
+            String downloadPage = getJsonString(object, "html_url", "https://github.com/KaelusAI/GroundedGrim/releases");
             String latest = parseReleaseVersion(object);
             @Nullable String warning = getJsonString(object, "warning", null);
             final String current = GrimAPI.INSTANCE.getExternalAPI().getGrimVersion();
-            Status status = getVersionStatus(current, latest);
+            Status status = "Unknown".equals(latest) ? Status.UNKNOWN
+                    : latest.equals(current) ? Status.UPDATED : Status.OUTDATED;
             //
             Component msg = switch (status) {
                 case AHEAD ->
-                        Component.text("You are using a development version of GrimEnterprise").color(NamedTextColor.LIGHT_PURPLE);
+                        Component.text("You are using a development version of GroundedGrim").color(NamedTextColor.LIGHT_PURPLE);
                 case UPDATED ->
-                        Component.text("You are using the latest version of GrimEnterprise").color(NamedTextColor.GREEN);
+                        Component.text("You are using the latest version of GroundedGrim").color(NamedTextColor.GREEN);
                 case OUTDATED -> Component.text()
-                        .append(Component.text("Update GrimEnterprise to ").color(NamedTextColor.AQUA))
-                        .append(Component.text(formatReleaseVersion(latest)).color(NamedTextColor.GRAY).decorate(TextDecoration.ITALIC))
-                        .append(Component.text(": ").color(NamedTextColor.GRAY))
+                        .append(Component.text("New GroundedGrim version found!").color(NamedTextColor.AQUA))
+                        .append(Component.text(" Version ").color(NamedTextColor.GRAY))
+                        .append(Component.text(latest).color(NamedTextColor.GRAY).decorate(TextDecoration.ITALIC))
+                        .append(Component.text(" is available to be downloaded here: ").color(NamedTextColor.GRAY))
                         .append(Component.text(downloadPage).color(NamedTextColor.GRAY).decorate(TextDecoration.UNDERLINED)
                                 .clickEvent(ClickEvent.openUrl(downloadPage)))
                         .build();
                 case UNKNOWN ->
-                        Component.text("You are using an unknown GrimEnterprise version.").color(NamedTextColor.RED);
+                        Component.text("You are using an unknown GroundedGrim version.").color(NamedTextColor.RED);
             };
             // in case of a critical exploit that requires attention, allow us to provide a warning
             if (warning != null && !warning.isBlank()) {
@@ -109,7 +111,7 @@ public class GrimVersion implements BuildableCommand {
             sender.sendMessage(msg);
         } catch (Exception e) {
             sender.sendMessage(Component.text("Failed to check latest version.").color(NamedTextColor.RED));
-            LogUtil.error("Failed to check latest GrimEnterprise version.", e);
+            LogUtil.error("Failed to check latest GroundedGrim version.", e);
         }
     }
 
@@ -122,50 +124,6 @@ public class GrimVersion implements BuildableCommand {
         int lastSpace = name.lastIndexOf(' ');
         if (lastSpace >= 0) name = name.substring(lastSpace + 1).trim();
         return name.isEmpty() ? getJsonString(release, "tag_name", "Unknown") : name;
-    }
-
-    private static Status getVersionStatus(String current, String latest) {
-        if (latest == null || latest.isBlank() || "Unknown".equalsIgnoreCase(latest)) {
-            return Status.UNKNOWN;
-        }
-        int currentMajor = parseEnterpriseMajor(current);
-        int latestMajor = parseEnterpriseMajor(latest);
-        if (currentMajor < 0 || latestMajor < 0) {
-            return Status.UNKNOWN;
-        }
-        if (currentMajor < latestMajor) return Status.OUTDATED;
-        if (currentMajor > latestMajor) return Status.AHEAD;
-
-        int currentBuild = parseBuildNumber(current);
-        int latestBuild = parseBuildNumber(latest);
-        if (latestBuild >= 0 && currentBuild < 0) return Status.OUTDATED;
-        if (currentBuild >= 0 && latestBuild >= 0) {
-            if (currentBuild < latestBuild) return Status.OUTDATED;
-            if (currentBuild > latestBuild) return Status.AHEAD;
-            return Status.UPDATED;
-        }
-        return currentBuild >= 0 ? Status.AHEAD : Status.UPDATED;
-    }
-
-    private static int parseEnterpriseMajor(String version) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern
-                .compile("(?i)(?:^|\\s)v(\\d+)(?:$|[\\s(-])").matcher(version);
-        return matcher.find() ? Integer.parseInt(matcher.group(1)) : -1;
-    }
-
-    private static int parseBuildNumber(String version) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern
-                .compile("(?i)devbuild-(\\d+)").matcher(version);
-        return matcher.find() ? Integer.parseInt(matcher.group(1)) : -1;
-    }
-
-    private static String formatReleaseVersion(String version) {
-        int major = parseEnterpriseMajor(version);
-        int build = parseBuildNumber(version);
-        if (major < 0) return version;
-        return build >= 0
-                ? "GrimEnterprise V" + major + " (devbuild-" + build + ")"
-                : "GrimEnterprise V" + major;
     }
 
     private static NamedTextColor getColorForStatusCode(int code) {

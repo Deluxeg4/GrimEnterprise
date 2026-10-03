@@ -1,9 +1,11 @@
 package ac.grim.grimac.predictionengine.movementtick;
 
 import ac.grim.grimac.player.GrimPlayer;
+import ac.grim.grimac.predictionengine.EntityPushSimulator;
 import ac.grim.grimac.predictionengine.PlayerBaseTick;
 import ac.grim.grimac.predictionengine.blockeffects.PotentSulfurGeyser;
 import ac.grim.grimac.predictionengine.predictions.PredictionEngine;
+import ac.grim.grimac.predictionengine.predictions.PredictionEngineDualState;
 import ac.grim.grimac.predictionengine.predictions.PredictionEngineElytra;
 import ac.grim.grimac.utils.collisions.datatypes.SimpleCollisionBox;
 import ac.grim.grimac.utils.data.VectorData;
@@ -33,6 +35,7 @@ import com.github.retrooper.packetevents.protocol.potion.PotionTypes;
 import com.github.retrooper.packetevents.protocol.world.states.defaulttags.BlockTags;
 import com.github.retrooper.packetevents.protocol.world.states.type.StateType;
 import com.github.retrooper.packetevents.util.Vector3d;
+import com.github.retrooper.packetevents.util.Vector3i;
 import com.viaversion.viaversion.api.Via;
 import lombok.RequiredArgsConstructor;
 
@@ -61,12 +64,20 @@ public class MovementTicker {
             SimpleCollisionBox playerBox = GetBoundingBox.getBoundingBoxFromPosAndSize(player, player.lastX, player.lastY, player.lastZ, 0.6f, 1.8f);
             playerBox.encompass(GetBoundingBox.getBoundingBoxFromPosAndSize(player, player.x, player.y, player.z, 0.6f, 1.8f).expand(player.getMovementThreshold()));
             playerBox.expand(0.2);
+            // Lag-comp-widened probe: remember when a pushable entity was plausibly near (push-FP fix).
+            final SimpleCollisionBox playerBoxWide = playerBox.copy().expand(0.3);
 
             final TeamHandler teamHandler = player.checkManager.get(TeamHandler.class);
             final EntityTeam playerTeam = teamHandler != null ? teamHandler.getPlayerTeam() : null;
             for (PacketEntity entity : player.compensatedEntities.entityMap.values()) {
                 // TODO actually handle entity collisions instead of this awfulness
                 SimpleCollisionBox entityBox = entity.getPossibleCollisionBoxes();
+
+                if (entity.isPushable() && playerBoxWide.isCollided(entityBox)
+                        && (!serverSupported || EntityPredicates.canBePushedBy(teamHandler != null ? teamHandler.getEntityTeam(entity) : null, playerTeam))) {
+                    player.uncertaintyHandler.lastPushableNear.reset();
+                }
+
                 if (!playerBox.isCollided(entityBox)) continue;
 
                 possibleRiptideEntities++;
@@ -93,6 +104,7 @@ public class MovementTicker {
 
         player.uncertaintyHandler.riptideEntities.add(possibleRiptideEntities);
         player.uncertaintyHandler.collidingEntities.add(possibleCollidingEntities);
+        player.uncertaintyHandler.pushRange = EntityPushSimulator.compute(player);
     }
 
     private boolean isHorizontalCollisionSoft(Vector3dm collide) {
@@ -227,6 +239,9 @@ public class MovementTicker {
         }
 
         player.mainSupportingBlockData = MainSupportingBlockPosFinder.findMainSupportingBlockPos(player, player.mainSupportingBlockData, new Vector3d(collide.getX(), collide.getY(), collide.getZ()), player.boundingBox, player.onGround);
+        final Vector3i supportPos = player.mainSupportingBlockData.blockPos();
+        player.onlySupportedByUnconfirmedPlacement = player.onGround && supportPos != null
+                && player.compensatedWorld.isGhostSupport(supportPos);
         StateType onBlock = BlockProperties.getOnPos(player, player.mainSupportingBlockData, new Vector3d(player.x, player.y, player.z));
 
         // Hack with 1.14+ poses issue
@@ -298,6 +313,13 @@ public class MovementTicker {
         } else {
             livingEntityTravel();
         }
+
+        player.uncertaintyHandler.predictedXNegative = player.uncertaintyHandler.xNegativeUncertainty;
+        player.uncertaintyHandler.predictedXPositive = player.uncertaintyHandler.xPositiveUncertainty;
+        player.uncertaintyHandler.predictedYNegative = player.uncertaintyHandler.yNegativeUncertainty;
+        player.uncertaintyHandler.predictedYPositive = player.uncertaintyHandler.yPositiveUncertainty;
+        player.uncertaintyHandler.predictedZNegative = player.uncertaintyHandler.zNegativeUncertainty;
+        player.uncertaintyHandler.predictedZPositive = player.uncertaintyHandler.zPositiveUncertainty;
 
         player.uncertaintyHandler.xNegativeUncertainty = 0;
         player.uncertaintyHandler.xPositiveUncertainty = 0;
@@ -527,6 +549,12 @@ public class MovementTicker {
 
                     new PredictionEngineElytra().guessBestMovement(0, player);
                 }
+            } else if (player.wasGliding
+                    || player.uncertaintyHandler.lastGlidingChange.hasOccurredSince(4)) {
+                float blockFriction = BlockProperties.getFriction(player, player.mainSupportingBlockData, new Vector3d(player.lastX, player.lastY, player.lastZ));
+                player.friction = player.lastOnGround ? blockFriction * 0.91f : 0.91f;
+
+                new PredictionEngineDualState().guessBestMovement(BlockProperties.getFrictionInfluencedSpeed(blockFriction, player), player);
             } else {
                 float blockFriction = BlockProperties.getFriction(player, player.mainSupportingBlockData, new Vector3d(player.lastX, player.lastY, player.lastZ));
                 float airDrag = BlockProperties.getModifiedAirDrag(0.91F, player);

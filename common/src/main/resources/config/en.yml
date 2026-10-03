@@ -64,6 +64,9 @@ cancel-duplicate-packet: true
 ignore-duplicate-packet-rotation: true
 
 Simulation:
+    # Predict a glider that stopped sending positions. Without it the check only runs on the client's
+    # 20-tick position reminder, which is a second of free hovering.
+    predict-withheld-glide: true
     # How much should we multiply total advantage by when the player is legit
     # This is what the default config looks like (x axis = seconds, y axis = 1/1000 block): https://www.desmos.com/calculator/d4ufgxrxer
     setback-decay-multiplier: 0.999
@@ -85,6 +88,9 @@ Simulation:
     # Violation level threshold for setback
     # 1 for old behavior
     setback-violation-threshold: 1
+    # Max residual tolerance for firework look interpolation (blocks/tick)
+    # Increase to 0.10 if getting false positives during fast turns with fireworks
+    firework-residual-cap: 0.05
 
 # Flying prediction - validates creative/ability flying speed
 # This was previously disabled in GrimAC, allowing unlimited fly speed

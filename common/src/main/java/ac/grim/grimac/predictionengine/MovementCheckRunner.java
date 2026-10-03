@@ -57,6 +57,8 @@ public class MovementCheckRunner extends GrimProcessor {
     public static double predictionNanos = 0.3 * 1e6;
     // Averaged over 20000 predictions
     public static double longPredictionNanos = 0.3 * 1e6;
+    // 50 blocks squared: a larger single-tick move is non-physical. Shared with CrashA, which reuses
+    // this exact line one pipeline stage earlier to drop the packet before the ~0.3ms prediction runs.
     public static final double NON_PHYSICAL_TICK_DISTANCE_SQUARED = 2500;
     private boolean allowSprintJumpingWithElytra = true;
 
@@ -117,6 +119,11 @@ public class MovementCheckRunner extends GrimProcessor {
                 final SetBackData setback = update.getSetback();
                 if (setback == null || setback.getVelocity() == null) {
                     update.getTeleportData().modifyVector(player, player.clientVelocity);
+                    if (setback != null && player.isFlying) {
+                        player.clientVelocity.setX(0);
+                        player.clientVelocity.setY(0);
+                        player.clientVelocity.setZ(0);
+                    }
                 } else {
                     // Enforce setback velocity?
                     player.clientVelocity.setX(setback.getVelocity().getX());
@@ -424,7 +431,7 @@ public class MovementCheckRunner extends GrimProcessor {
         SimpleCollisionBox expandedBB = GetBoundingBox.getBoundingBoxFromPosAndSize(player, player.lastX, player.lastY, player.lastZ, 0.001f, 0.001f);
 
         // Don't expand if the player moved more than 50 blocks this tick (stop netty crash exploit)
-        if (player.actualMovement.lengthSquared() < 2500)
+        if (player.actualMovement.lengthSquared() < NON_PHYSICAL_TICK_DISTANCE_SQUARED)
             expandedBB.expandToAbsoluteCoordinates(player.x, player.y, player.z);
 
         expandedBB.expand(Pose.STANDING.width / 2, 0, Pose.STANDING.width / 2);
@@ -443,8 +450,13 @@ public class MovementCheckRunner extends GrimProcessor {
         player.uncertaintyHandler.isOrWasNearGlitchyBlock = isGlitchy || player.uncertaintyHandler.isNearGlitchyBlock;
         player.uncertaintyHandler.checkForHardCollision();
 
-        if (player.isFlying != player.wasFlying)
+        if (player.isFlying != player.wasFlying
+                && !player.uncertaintyHandler.lastFlyingStatusChange.hasOccurredSince(10))
             player.uncertaintyHandler.lastFlyingStatusChange.reset();
+
+        if (player.isGliding != player.wasGliding) {
+            player.uncertaintyHandler.lastGlidingChange.reset();
+        }
 
         if (!player.inVehicle() && (Math.abs(player.x) == 2.9999999E7D || Math.abs(player.z) == 2.9999999E7D)) {
             player.uncertaintyHandler.lastThirtyMillionHardBorder.reset();
@@ -481,11 +493,8 @@ public class MovementCheckRunner extends GrimProcessor {
             // Dead players can't cheat, if you find a way how they could, open an issue
             player.predictedVelocity = new VectorData(new Vector3dm(), VectorData.VectorType.Dead);
             player.clientVelocity = new Vector3dm();
-        } else if (player.disableGrim || (PacketEvents.getAPI().getServerManager().getVersion().isNewerThanOrEquals(ServerVersion.V_1_8) && player.gamemode == GameMode.SPECTATOR) || player.isFlying || (player.isExemptElytra() && player.isGliding)) {
+        } else if (player.disableGrim || (PacketEvents.getAPI().getServerManager().getVersion().isNewerThanOrEquals(ServerVersion.V_1_8) && player.gamemode == GameMode.SPECTATOR) || (player.isFlying && !player.flyingPredictionEnabled) || (player.isExemptElytra() && player.isGliding)) {
             // We could technically check spectator but what's the point...
-            // Added complexity to analyze a gamemode used mainly by moderators
-            //
-            // TODO: Re-implement flying support, although LUNAR HAS FLYING CHEATS!!! HOW CAN I CHECK WHEN HALF THE PLAYER BASE IS USING CHEATS???
             player.predictedVelocity = new VectorData(player.actualMovement, VectorData.VectorType.Spectator);
             player.clientVelocity = player.actualMovement.clone();
             player.gravity = 0;
@@ -583,7 +592,7 @@ public class MovementCheckRunner extends GrimProcessor {
         // Fixes LiquidBounce Jesus NCP, and theoretically AirJump bypass
         //
         // Checking for oldClientVel being too high fixes BleachHack vertical scaffold
-        if (player.getSetbackTeleportUtil().getRequiredSetBack() != null && player.getSetbackTeleportUtil().getRequiredSetBack().getTicksComplete() == 1) {
+        if (!player.isFlying && player.getSetbackTeleportUtil().getRequiredSetBack() != null && player.getSetbackTeleportUtil().getRequiredSetBack().getTicksComplete() == 1) {
             Vector3dm setbackVel = player.getSetbackTeleportUtil().getRequiredSetBack().getVelocity();
             // A player must have velocity going INTO the ground to be able to jump
             // Otherwise they could ignore upwards velocity that isn't useful into more useful upwards velocity (towering)
@@ -604,6 +613,15 @@ public class MovementCheckRunner extends GrimProcessor {
 
         // Let's hope this doesn't desync :)
         if (player.getSetbackTeleportUtil().blockOffsets) offset = 0;
+
+        if (offset > 0) {
+            int chunkX = (int) Math.floor(player.x) >> 4;
+            int chunkZ = (int) Math.floor(player.z) >> 4;
+            if (!player.compensatedWorld.isChunkLoaded(chunkX, chunkZ)) {
+                offset = 0;
+            }
+        }
+
 
         if (player.skippedTickInActualMovement || !wasChecked)
             player.uncertaintyHandler.lastPointThree.reset();
@@ -712,5 +730,11 @@ public class MovementCheckRunner extends GrimProcessor {
     @Override
     public void onReload(@NotNull ConfigManager config) {
         allowSprintJumpingWithElytra = config.getBooleanElse("exploit.allow-sprint-jumping-when-using-elytra", true);
+        player.flyingPredictionEnabled = config.getBooleanElse("FlyingPrediction.enabled", true);
+        player.flyingPredictionTolerance = config.getDoubleElse("FlyingPrediction.tolerance", 0.05);
+        if (player.uncertaintyHandler != null) {
+            player.uncertaintyHandler.fireworkResidualCap = config.getDoubleElse("Simulation.firework-residual-cap", 0.008);
+            player.uncertaintyHandler.fireworkResidualFloor = config.getDoubleElse("Simulation.firework-residual-floor", 0.003);
+        }
     }
 }

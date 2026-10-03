@@ -49,7 +49,7 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         with:
           tag_name: "${{ steps.version.outputs.tag }}"
-          name: "GrimEnterprise ${{ steps.version.outputs.version }}"
+          name: "GroundedGrim ${{ steps.version.outputs.version }}"
           body: "Automatic release from commit ${{ env.HEAD_SHA }}."
           files: |
             bukkit/build/libs/grimac-bukkit-*.jar
