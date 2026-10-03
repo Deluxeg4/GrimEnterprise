@@ -99,13 +99,21 @@ public class GrimExternalAPI implements GrimAbstractAPI, ConfigReloadObserver, S
             Properties properties = PropertiesUtil.readProperties(GrimExternalAPI.class, "grimac.properties");
             String buildVersion = properties.getProperty("build.version");
             if (buildVersion != null && !buildVersion.isBlank() && !buildVersion.startsWith("${")) {
-                return buildVersion;
+                java.util.regex.Matcher devBuild = java.util.regex.Pattern
+                        .compile("^V3-devbuild-(\\d+)(?:-.*)?$").matcher(buildVersion);
+                if (devBuild.matches()) {
+                    return "GrimEnterprise V3 (devbuild-" + devBuild.group(1) + ")";
+                }
+                if (buildVersion.equals("V3")) {
+                    return "GrimEnterprise V3";
+                }
+                return "GrimEnterprise " + buildVersion;
             }
         } catch (RuntimeException ignored) {
         }
 
         try {
-            return api.getGrimPlugin().getDescription().getVersion();
+            return "GrimEnterprise " + api.getGrimPlugin().getDescription().getVersion();
         } catch (RuntimeException e) {
             return "unknown";
         }
@@ -226,7 +234,6 @@ public class GrimExternalAPI implements GrimAbstractAPI, ConfigReloadObserver, S
         GrimAPI.INSTANCE.getAlertManager().reload(configManager);
         GrimAPI.INSTANCE.getDiscordManager().reload();
         GrimAPI.INSTANCE.getSpectateManager().reload();
-        ac.grim.grimac.events.packets.CheckManagerListener.reload(configManager);
         PacketInfoSpoof.reload(configManager);
         PacketStaffListSpoof.reload(configManager);
         // First-load guard: load() calls reload() before start() runs, so this fires once with started=false before the datastore exists. Subsequent /grim reload calls see started=true and proceed (including disabled→enabled flips — DataStoreLifecycle.reload() re-evaluates builder.enabled() each time).

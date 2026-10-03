@@ -19,20 +19,19 @@ object VersionUtil {
         }
 
         val commitHash = getGitCommitHash(project)
-        val branch = getGitBranch(project)
+        val buildNumber = System.getenv("GRIM_BUILD_NUMBER")
+            ?: gitCommitCount(project)
+        return "$baseVersion-devbuild-$buildNumber-$commitHash"
+    }
 
-        val modifiers = buildList {
-            if (!BuildConfig.shadePE) add("lite")
-            if (!BuildConfig.relocate) add("no_relocate")
-        }.joinToString("-").takeIf { it.isNotEmpty() }
-
-        return buildString {
-            append(baseVersion)
-            append("-")
-            branch?.let { append("$it-") }
-            append(commitHash)
-            modifiers?.let { append("+$it") }
-        }
+    private fun gitCommitCount(project: Project): String = try {
+        project.providers.exec {
+            commandLine("git", "rev-list", "--count", "HEAD")
+            workingDir(project.projectDir)
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get().trim().ifEmpty { "0" }
+    } catch (_: Exception) {
+        "0"
     }
 
     fun getGitCommitHash(project: Project, full: Boolean = false): String {

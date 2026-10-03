@@ -21,7 +21,7 @@ public class BaseConfigManager {
     @Getter
     private boolean printAlertsToConsole = false;
     @Getter
-    private String prefix = "&bGroundedGrim &8»";
+    private String prefix = "&bGrim &c&o[Enterprise] &8Â»";
     @Getter
     private String webhookNotEnabled;
     @Getter
@@ -67,7 +67,7 @@ public class BaseConfigManager {
         }
 
         printAlertsToConsole = config.getBooleanElse("alerts.print-to-console", true);
-        prefix = config.getStringElse("prefix", "&bGroundedGrim &8»");
+        prefix = config.getStringElse("prefix", "&bGrim &c&o[Enterprise] &8Â»");
 
         webhookNotEnabled = config.getStringElse("webhook-not-enabled", "Discord webhooks are not enabled!");
         webhookTestMessage = config.getStringElse("webhook-test-message", "test message");

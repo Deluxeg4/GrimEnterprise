@@ -133,10 +133,10 @@ dependencies {
 }
 
 bukkit {
-    name = "GroundedGrim"
-    author = "KaelusMC"
+    name = "GrimEnterprise"
+    author = "zeb.deluxeg4, polarac.java"
     main = "ac.grim.grimac.platform.bukkit.GrimACBukkitLoaderPlugin"
-    website = "https://github.com/KaelusMC/GroundedGrim"
+    website = "https://github.com/Deluxeg4/GrimEnterprise"
     apiVersion = "1.13"
     foliaSupported = true
 
