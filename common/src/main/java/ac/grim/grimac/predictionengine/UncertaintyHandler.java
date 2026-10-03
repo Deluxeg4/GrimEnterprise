@@ -78,8 +78,6 @@ public class UncertaintyHandler {
     // Fishing rod pulling is another method of adding to a player's velocity
     public final List<Integer> fishingRodPulls = new ArrayList<>();
     public SimpleCollisionBox fireworksBox = null;
-    public double fireworkResidualCap = 0.008;
-    public double fireworkResidualFloor = 0.003;
     public SimpleCollisionBox fishingRodPullBox = null;
     public boolean shouldSimulateStuckSpeed = false;
     public int stuckSpeedMultiplierMask = StuckSpeed.NONE.getIndex();
@@ -235,28 +233,42 @@ public class UncertaintyHandler {
 
         fishingRodPulls.clear();
 
-        if (player.wasTouchingWater) lastTouchingWater.reset();
-
-        int maxFireworks = player.fireworks.getMaxFireworksAppliedPossible();
+        int maxFireworks = player.fireworks.getMaxFireworksAppliedPossible() * 2;
         if (maxFireworks <= 0 || (!player.isGliding && !player.wasGliding)) {
             return;
         }
-        int magnitudeFireworks = player.fireworks.getMaxFireworksForMagnitude();
+
+        fireworksBox = new SimpleCollisionBox();
 
         Vector3dm currentLook = ReachUtils.getLook(player, player.yaw, player.pitch);
         Vector3dm lastLook = ReachUtils.getLook(player, player.lastYaw, player.lastPitch);
 
-        // Boost is modeled in the prediction candidates (air + water); this box is only the look-bridge tolerance.
-        double residualX = Math.min(fireworkResidualCap, Math.max(fireworkResidualFloor,
-            0.5 * Math.abs(currentLook.getX() - lastLook.getX()) * 0.85 * magnitudeFireworks));
-        double residualY = Math.min(fireworkResidualCap, Math.max(fireworkResidualFloor,
-            0.5 * Math.abs(currentLook.getY() - lastLook.getY()) * 0.85 * magnitudeFireworks));
-        double residualZ = Math.min(fireworkResidualCap, Math.max(fireworkResidualFloor,
-            0.5 * Math.abs(currentLook.getZ() - lastLook.getZ()) * 0.85 * magnitudeFireworks));
-        fireworksBox = new SimpleCollisionBox(
-            -residualX, -residualY, -residualZ,
-             residualX,  residualY,  residualZ
-        );
+        double antiTickSkipping = player.isPointThree() ? 0 : 0.05; // With 0.03, let that handle tick skipping
+
+        double minX = Math.min(-antiTickSkipping, currentLook.getX()) + Math.min(-antiTickSkipping, lastLook.getX());
+        double minY = Math.min(-antiTickSkipping, currentLook.getY()) + Math.min(-antiTickSkipping, lastLook.getY());
+        double minZ = Math.min(-antiTickSkipping, currentLook.getZ()) + Math.min(-antiTickSkipping, lastLook.getZ());
+        double maxX = Math.max(antiTickSkipping, currentLook.getX()) + Math.max(antiTickSkipping, lastLook.getX());
+        double maxY = Math.max(antiTickSkipping, currentLook.getY()) + Math.max(antiTickSkipping, lastLook.getY());
+        double maxZ = Math.max(antiTickSkipping, currentLook.getZ()) + Math.max(antiTickSkipping, lastLook.getZ());
+
+        minX *= 1.7;
+        minY *= 1.7;
+        minZ *= 1.7;
+        maxX *= 1.7;
+        maxY *= 1.7;
+        maxZ *= 1.7;
+
+        minX = Math.max(-1.7, minX);
+        minY = Math.max(-1.7, minY);
+        minZ = Math.max(-1.7, minZ);
+        maxX = Math.min(1.7, maxX);
+        maxY = Math.min(1.7, maxY);
+        maxZ = Math.min(1.7, maxZ);
+
+        // The maximum movement impact a firework can have is 1.7 blocks/tick
+        // This scales with the look vector linearly
+        fireworksBox = new SimpleCollisionBox(minX, minY, minZ, maxX, maxY, maxZ);
     }
 
     public double getOffsetHorizontal(VectorData data) {
@@ -340,40 +352,24 @@ public class UncertaintyHandler {
         // Boats are too glitchy to check.
         // Yes, they have caused an insane amount of uncertainty!
         // Even 1 block offset reduction isn't enough... damn it mojang
-        boolean isElytraFlight = player.isGliding && player.wasGliding;
-        offsetReductionMask = 0;
-
         if (player.uncertaintyHandler.lastHardCollidingLerpingEntity.hasOccurredSince(3)) {
-            offset -= isElytraFlight ? 0.3 : 1.2;
-            offsetReductionMask |= 1;
-        }
-
-        // Keep the water firework leniency for a few ticks AFTER leaving water: the up/down-through-water
-        // crossing has a ~0.02 water<->air terminal gap the shrunk residual box no longer covers on the air side.
-        if (player.uncertaintyHandler.lastTouchingWater.hasOccurredSince(3) && (player.isGliding || player.wasGliding)
-                && player.fireworks.getMaxFireworksAppliedPossible() > 0) {
-            offset -= 0.05;
-            offsetReductionMask |= 1 << 1;
+            offset -= 1.2;
         }
 
         if (player.uncertaintyHandler.isOrWasNearGlitchyBlock) {
-            offset -= isElytraFlight ? 0.05 : 0.25;
-            offsetReductionMask |= 1 << 2;
+            offset -= 0.25;
         }
 
         // This is a section where I hack around current issues with Grim itself...
         if (player.uncertaintyHandler.influencedByBouncyBlock() && (!player.isPointThree() || player.inVehicle())) {
             offset -= 0.03;
-            offsetReductionMask |= 1 << 3;
         }
         // This is the end of that section.
 
         // I can't figure out how the client exactly tracks boost time
         if (player.compensatedEntities.self.getRiding() instanceof PacketEntityRideable vehicle) {
-            if (vehicle.currentBoostTime < vehicle.boostTimeMax + 20) {
+            if (vehicle.currentBoostTime < vehicle.boostTimeMax + 20)
                 offset -= 0.01;
-                offsetReductionMask |= 1 << 4;
-            }
         }
 
         return Math.max(0, offset);
@@ -382,12 +378,13 @@ public class UncertaintyHandler {
     public void checkForHardCollision() {
         // Look for boats the player could collide with
         if (hasHardCollision()) player.uncertaintyHandler.lastHardCollidingLerpingEntity.reset();
-        if (isSteppingNearShulker) player.uncertaintyHandler.lastShulkerBoxNearby.reset();
     }
 
     private boolean hasHardCollision() {
+        // This bounding box can be infinitely large without crashing the server.
+        // This works by the proof that if you collide with an object, you will stop near the object
         SimpleCollisionBox expandedBB = player.boundingBox.copy().expand(1);
-        return regularHardCollision(expandedBB) || striderCollision(expandedBB) || boatCollision(expandedBB);
+        return isSteppingNearShulker || regularHardCollision(expandedBB) || striderCollision(expandedBB) || boatCollision(expandedBB);
     }
 
     private boolean regularHardCollision(SimpleCollisionBox expandedBB) {
